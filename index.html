@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c63e7" />
+  <meta name="description" content="RoadCast - weather for the road ahead" />
+  <title>RoadCast</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3ynxNWHDhvJgZz8uK7zKkFjXg4p4Y=" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div class="logo">🌦️</div>
+      <div>
+        <h1>ROADCAST</h1>
+        <p>Know the weather you are driving into.</p>
+      </div>
+      <span class="badge">MVP 0.2</span>
+    </header>
+
+    <section>
+      <h2>Your Location</h2>
+      <div id="locationCard" class="card loading">Getting your location and current weather...</div>
+      <div id="locationFallback" class="actions hidden">
+        <button id="retryLocationBtn" class="primary">Try location again</button>
+        <button id="demoLocationBtn">Use Knoxville demo location</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Where are you going?</h2>
+      <div class="search-row">
+        <input id="destinationInput" placeholder="City or town, such as Nashville, TN" autocomplete="off" />
+        <button id="findBtn" class="primary">Find</button>
+      </div>
+      <div id="searchResults" class="results"></div>
+      <div id="selectedDestination" class="selected hidden"></div>
+
+      <div class="departure card">
+        <div>
+          <strong>Departure</strong>
+          <div id="departureLabel">Leaving now</div>
+        </div>
+        <div class="departure-actions">
+          <button id="nowBtn">Now</button>
+          <input id="departureInput" type="datetime-local" />
+        </div>
+      </div>
+
+      <button id="tripBtn" class="trip-btn primary">🚗 CHECK MY TRIP</button>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section id="tripSection" class="hidden">
+      <div class="section-title-row">
+        <h2>Weather Along Your Route</h2>
+        <button id="installBtn" class="hidden">Install RoadCast</button>
+      </div>
+      <div id="tripStats" class="pills"></div>
+
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div id="driveOverlay" class="drive-overlay hidden">
+          <div id="driveOverlayIcon" class="drive-overlay-icon">✅</div>
+          <div>
+            <strong id="driveOverlayTitle">Road weather ahead looks calm</strong>
+            <div id="driveOverlayDetail">Watching the road ahead.</div>
+          </div>
+        </div>
+      </div>
+      <div class="map-note">Map data © OpenStreetMap contributors • Prototype tile usage only</div>
+
+      <div id="driveLaunch" class="drive-launch">
+        <button id="startDriveBtn" class="primary">🧭 START ROADCAST</button>
+        <button id="simulateDriveBtn">▶ SIMULATE DRIVE</button>
+      </div>
+
+      <div id="drivePanel" class="drive-panel hidden">
+        <div class="drive-panel-head">
+          <div>
+            <strong id="driveDestination">RoadCast Drive</strong>
+            <div id="driveStatus" class="check-sub">LIVE GPS</div>
+          </div>
+          <button id="stopDriveBtn" aria-label="Stop RoadCast">✕</button>
+        </div>
+        <div class="drive-metrics">
+          <div><span>Remaining</span><strong id="driveRemaining">-- mi</strong></div>
+          <div><span>ETA</span><strong id="driveEta">--</strong></div>
+          <div><span>Speed</span><strong id="driveSpeed">-- mph</strong></div>
+        </div>
+        <div class="drive-progress-track"><div id="driveProgressBar"></div></div>
+        <div class="drive-actions">
+          <button id="followDriveBtn" class="primary">◎ Follow me</button>
+          <button id="pauseDemoBtn" class="hidden">⏸ Pause simulation</button>
+        </div>
+      </div>
+
+      <div id="weatherAlert" class="alert"></div>
+      <div id="timeline" class="timeline"></div>
+    </section>
+
+    <footer class="card footnote">
+      🧪 Prototype: Open-Meteo weather/geocoding + OSRM routing + OpenStreetMap tiles. Replace public routing/tile endpoints before a commercial launch.
+    </footer>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>

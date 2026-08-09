@@ -1,0 +1,13 @@
+{
+  "name": "RoadCast - Weather for the Road Ahead",
+  "short_name": "RoadCast",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#07111f",
+  "theme_color": "#0c63e7",
+  "description": "Weather where you are, where you are going, and along the road between.",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
