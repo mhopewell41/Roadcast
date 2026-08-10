@@ -11,6 +11,7 @@ const state = {
   routeLayer: null,
   markerLayer: null,
   installPrompt: null,
+  mapResizeObserver: null,
 
   driveActive: false,
   driveDemo: false,
@@ -42,6 +43,9 @@ const els = {
   status: $('status'),
   tripSection: $('tripSection'),
   tripStats: $('tripStats'),
+  tripNavStrip: $('tripNavStrip'),
+  tripNavOrigin: $('tripNavOrigin'),
+  tripNavDestination: $('tripNavDestination'),
   weatherAlert: $('weatherAlert'),
   timeline: $('timeline'),
   installBtn: $('installBtn'),
@@ -86,6 +90,15 @@ function durationText(seconds) {
 function setStatus(text, error = false) { els.status.textContent = text || ''; els.status.classList.toggle('error', error); }
 function htmlEscape(value) { return String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+function destinationScore(p) {
+  const code = String(p.feature_code || '').toUpperCase();
+  let score = 0;
+  if (code.startsWith('PPLA')) score += 5000;
+  else if (code === 'PPL' || code.startsWith('PPL')) score += 3500;
+  if (Number.isFinite(Number(p.population))) score += Math.log10(Math.max(1, Number(p.population))) * 500;
+  if (p.admin1) score += 100;
+  return score;
+}
 
 function weatherCardHtml(title, subtitle, w) {
   const [icon, label] = codeInfo(w.code);
@@ -160,7 +173,7 @@ async function searchDestination() {
     const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?${q}`);
     if (!res.ok) throw new Error(`Destination search returned ${res.status}.`);
     const data = await res.json();
-    state.searchResults = data.results || [];
+    state.searchResults = (data.results || []).slice().sort((a, b) => destinationScore(b) - destinationScore(a));
     renderSearchResults();
     if (!state.searchResults.length) setStatus('No destination found. Try a city and state, such as Nashville, TN.', true);
   } catch (err) { setStatus(err.message || String(err), true); }
@@ -301,14 +314,37 @@ function renderTrip() {
   els.tripSection.classList.remove('hidden');
   els.driveLaunch.classList.remove('hidden');
   els.tripStats.innerHTML = `<span class="pill">🛣️ ${miles(route.distance).toFixed(0)} mi</span><span class="pill">⏱️ ${durationText(route.duration)}</span><span class="pill">🏁 Arrive ${fmtTime(arrival)}</span>`;
+  els.tripNavStrip?.classList.remove('hidden');
+  if (els.tripNavOrigin) els.tripNavOrigin.textContent = 'Your location';
+  if (els.tripNavDestination) els.tripNavDestination.textContent = state.destination?.name || 'Destination';
   renderMap(route, checkpoints); renderAlert(route, checkpoints); renderTimeline(route, checkpoints);
   els.tripSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderMap(route, checkpoints) {
   if (!state.map) {
-    state.map = L.map('map', { zoomControl: true });
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(state.map);
+    state.map = L.map('map', {
+      zoomControl: true,
+      zoomAnimation: false,
+      fadeAnimation: false,
+      markerZoomAnimation: false,
+      inertia: false,
+      trackResize: true
+    });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+      updateWhenIdle: false,
+      updateWhenZooming: false,
+      keepBuffer: 4
+    }).addTo(state.map);
+    if (typeof ResizeObserver !== 'undefined') {
+      state.mapResizeObserver = new ResizeObserver(() => {
+        if (!state.map) return;
+        requestAnimationFrame(() => state.map?.invalidateSize({ pan: false, animate: false }));
+      });
+      state.mapResizeObserver.observe(els.map);
+    }
     state.map.on('dragstart', () => {
       if (state.driveActive) {
         state.driveFollow = false;
@@ -326,8 +362,29 @@ function renderMap(route, checkpoints) {
     const markerIcon = L.divIcon({ className: '', html: `<div style="width:46px;height:46px;border-radius:50%;background:#fff;border:3px solid #0b1f3a;display:grid;place-items:center;font-size:23px;box-shadow:0 4px 12px #0005">${icon}</div>`, iconSize: [46,46], iconAnchor: [23,23] });
     L.marker([c.point.lat, c.point.lon], { icon: markerIcon }).bindPopup(`<strong>${htmlEscape(c.label)}</strong><br>${fmtTime(c.eta)}<br>${Math.round(c.weather.temp)}°F • ${label}<br>Rain ${c.weather.rainChance}%`).addTo(state.markerLayer);
   });
-  state.map.fitBounds(state.routeLayer.getBounds(), { padding: [35,35] });
-  setTimeout(() => state.map.invalidateSize(), 50);
+  const firstPoint = route.points[0];
+  const lastPoint = route.points.at(-1);
+  const startIcon = L.divIcon({
+    className: '',
+    html: `<div class="route-endpoint"><div class="route-endpoint-pin">📍</div><div class="route-endpoint-label">START / YOU</div></div>`,
+    iconSize: [100, 58], iconAnchor: [50, 29]
+  });
+  const destinationIcon = L.divIcon({
+    className: '',
+    html: `<div class="route-endpoint destination"><div class="route-endpoint-pin">🏁</div><div class="route-endpoint-label">${htmlEscape(state.destination?.name || 'DESTINATION')}</div></div>`,
+    iconSize: [150, 58], iconAnchor: [75, 29]
+  });
+  L.marker([firstPoint.lat, firstPoint.lon], { icon: startIcon, zIndexOffset: 900 }).addTo(state.markerLayer);
+  L.marker([lastPoint.lat, lastPoint.lon], { icon: destinationIcon, zIndexOffset: 900 }).addTo(state.markerLayer);
+  const previewBounds = state.routeLayer.getBounds();
+  requestAnimationFrame(() => {
+    state.map.invalidateSize({ pan: false, animate: false });
+    state.map.fitBounds(previewBounds, { padding: [28,28], animate: false });
+    setTimeout(() => {
+      state.map.invalidateSize({ pan: false, animate: false });
+      state.map.fitBounds(previewBounds, { padding: [28,28], animate: false });
+    }, 250);
+  });
 }
 
 function renderAlert(route, checkpoints) {
@@ -422,11 +479,11 @@ function routeHeadingAtProgress(route, progress) {
 
 function vehicleIcon(heading, demo) {
   const symbol = demo ? '🚗' : '▲';
-  const size = demo ? 26 : 28;
+  const size = demo ? 25 : 27;
   return L.divIcon({
     className: '',
-    html: `<div class="drive-vehicle"><div class="drive-arrow" style="font-size:${size}px;transform:rotate(${heading}deg)">${symbol}</div></div>`,
-    iconSize: [54, 54], iconAnchor: [27, 27]
+    html: `<div class="drive-vehicle-wrap"><div class="drive-vehicle"><div class="drive-arrow" style="font-size:${size}px;transform:rotate(${heading}deg)">${symbol}</div></div><div class="drive-vehicle-label">YOU</div></div>`,
+    iconSize: [66, 76], iconAnchor: [33, 27]
   });
 }
 
@@ -444,10 +501,14 @@ function startRoadCast(demoMode) {
   els.driveOverlay.classList.remove('hidden');
   els.pauseDemoBtn.classList.toggle('hidden', !demoMode);
   els.pauseDemoBtn.textContent = '⏸ Pause simulation';
-  els.driveDestination.textContent = state.destination?.name || 'Destination';
-  els.driveStatus.textContent = demoMode ? 'SIMULATED DRIVE • 45-second route demo' : 'LIVE GPS • waiting for movement';
+  els.driveDestination.textContent = `YOU → ${state.destination?.name || 'Destination'}`;
+  els.driveStatus.textContent = demoMode ? 'SIMULATED DRIVE • 45-second route demo' : 'LIVE GPS • location locked • waiting for movement';
   els.map.classList.add('driving');
-  setTimeout(() => state.map.invalidateSize(), 260);
+  setTimeout(() => {
+    state.map.invalidateSize({ pan: false, animate: false });
+    const first = state.driveProgress?.snapped || state.trip.route.points[0];
+    state.map.setView([first.lat, first.lon], 15, { animate: false });
+  }, 320);
 
   if (state.routeLayer) {
     state.map.removeLayer(state.routeLayer);
@@ -487,6 +548,14 @@ function startRoadCast(demoMode) {
       },
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
     );
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const raw = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        updateDrivePosition(raw, pos.coords.heading, pos.coords.speed, false);
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+    );
   } else {
     els.driveStatus.textContent = 'This browser does not provide live GPS. Use Simulate Drive.';
   }
@@ -514,7 +583,10 @@ function updateDrivePosition(raw, gpsHeading, speedMps, demoMode) {
   state.drivePassedLayer?.setLatLngs(passed.map(p => [p.lat, p.lon]));
   state.driveRemainingLayer?.setLatLngs(remaining.map(p => [p.lat, p.lon]));
 
-  if (state.driveFollow) state.map.setView([displayPoint.lat, displayPoint.lon], 15, { animate: true });
+  if (state.driveFollow) {
+    state.map.invalidateSize({ pan: false, animate: false });
+    state.map.setView([displayPoint.lat, displayPoint.lon], 15, { animate: false });
+  }
 
   const remainingSeconds = route.duration * (1 - located.progress);
   const eta = new Date(Date.now() + remainingSeconds * 1000);
@@ -528,7 +600,8 @@ function updateDrivePosition(raw, gpsHeading, speedMps, demoMode) {
   } else if (demoMode) {
     els.driveStatus.textContent = state.drivePaused ? 'SIMULATION PAUSED' : 'SIMULATED DRIVE • movement preview';
   } else {
-    els.driveStatus.textContent = `LIVE GPS • ${located.offRoute < 120 ? 'snapped to route' : 'checking route position'}`;
+    const motion = Number(speedMps || 0) > 0.5 ? 'moving' : 'waiting for movement';
+    els.driveStatus.textContent = `LIVE GPS • ${located.offRoute < 120 ? 'on route' : 'checking route'} • ${motion}`;
   }
 
   updateDriveAlert(located, demoMode);
@@ -577,7 +650,8 @@ function followDrive() {
   updateFollowButton();
   if (state.driveProgress) {
     const p = state.driveProgress.offRoute > 200 && !state.driveDemo ? state.driveProgress.raw : state.driveProgress.snapped;
-    state.map.setView([p.lat, p.lon], 15, { animate: true });
+    state.map.invalidateSize({ pan: false, animate: false });
+    state.map.setView([p.lat, p.lon], 15, { animate: false });
   }
 }
 
@@ -612,7 +686,7 @@ function stopDrive(renderPreview = true) {
   els.driveOverlay.classList.add('hidden');
   els.map.classList.remove('driving');
   els.driveLaunch.classList.toggle('hidden', !state.trip);
-  setTimeout(() => state.map?.invalidateSize(), 260);
+  setTimeout(() => state.map?.invalidateSize({ pan: false, animate: false }), 260);
 
   if (renderPreview && state.trip && state.map) renderMap(state.trip.route, state.trip.checkpoints);
 }

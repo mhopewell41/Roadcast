@@ -131,3 +131,47 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .drive-overlay { left: 8px; right: 8px; top: 8px; }
   .drive-metrics strong { font-size: 16px; }
 }
+
+
+/* RoadCast 0.2.1 Fold/mobile map hardening */
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas {
+  position: absolute !important; left: 0; top: 0;
+}
+.leaflet-container { overflow: hidden !important; -webkit-tap-highlight-color: transparent; isolation: isolate; }
+.leaflet-tile, .leaflet-marker-icon, .leaflet-marker-shadow { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
+.leaflet-tile { max-width: none !important; max-height: none !important; }
+.trip-nav-strip {
+  display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 10px; align-items: center;
+  padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--border); border-radius: 16px; background: rgba(11,23,38,.96);
+}
+.trip-nav-place { min-width: 0; }
+.trip-nav-place:last-child { text-align: right; }
+.trip-nav-label { display: block; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
+.trip-nav-name { display: block; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trip-nav-arrow { color: #85b9ff; font-size: 22px; }
+.drive-vehicle-wrap { width: 66px; height: 76px; display: flex; flex-direction: column; align-items: center; }
+.drive-vehicle-label { margin-top: 3px; padding: 2px 6px; border-radius: 999px; background: rgba(7,17,31,.96); border: 1px solid rgba(255,255,255,.2); color: #fff; font-size: 10px; font-weight: 900; letter-spacing: .06em; box-shadow: 0 3px 10px rgba(0,0,0,.35); }
+#map { contain: layout paint; width: 100%; }
+@media (max-width: 620px) {
+  .trip-nav-strip { padding: 10px; gap: 6px; }
+  .trip-nav-name { font-size: 13px; }
+  #map.driving { height: 52vh; min-height: 360px; }
+}
+
+.route-endpoint { display:flex; flex-direction:column; align-items:center; gap:3px; white-space:nowrap; filter:drop-shadow(0 3px 7px rgba(0,0,0,.45)); }
+.route-endpoint-pin { width:34px; height:34px; display:grid; place-items:center; border-radius:50%; border:3px solid #fff; background:#146be8; font-size:18px; }
+.route-endpoint.destination .route-endpoint-pin { background:#d74444; }
+.route-endpoint-label { max-width:145px; padding:3px 7px; border-radius:8px; background:rgba(7,17,31,.96); border:1px solid rgba(255,255,255,.16); color:#fff; font-size:10px; font-weight:850; overflow:hidden; text-overflow:ellipsis; }
+.leaflet-pane { z-index: 400; }
+.leaflet-tile-pane { z-index: 200; }
+.leaflet-overlay-pane { z-index: 400; }
+.leaflet-shadow-pane { z-index: 500; }
+.leaflet-marker-pane { z-index: 600; }
+.leaflet-tooltip-pane { z-index: 650; }
+.leaflet-popup-pane { z-index: 700; }
