@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://unpkg.com" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3ynxNWHDhvJgZz8uK7zKkFjXg4p4Y=" crossorigin="" />
   <link rel="stylesheet" href="styles.css?v=0.2.1" />
+  <link rel="stylesheet" href="nav-voice.css?v=0.4.0" />
 </head>
 <body>
   <main class="shell">
@@ -20,7 +21,7 @@
         <h1>ROADCAST</h1>
         <p>Know the weather you are driving into.</p>
       </div>
-      <span class="badge">MVP 0.3</span>
+      <span class="badge">MVP 0.4</span>
     </header>
 
     <section>
@@ -75,6 +76,15 @@
         </div>
       </div>
 
+      <div id="nextTurnCard" class="next-turn-card hidden" aria-live="polite">
+        <div id="nextTurnIcon" class="next-turn-icon">⬆️</div>
+        <div class="next-turn-copy">
+          <div id="nextTurnDistance" class="next-turn-distance">Continue</div>
+          <strong id="nextTurnText">Follow the highlighted route</strong>
+          <div id="nextTurnRoad" class="next-turn-road"></div>
+        </div>
+      </div>
+
       <div class="map-wrap">
         <div id="map"></div>
         <div id="driveOverlay" class="drive-overlay hidden">
@@ -100,15 +110,61 @@
           </div>
           <button id="stopDriveBtn" aria-label="Stop RoadCast">✕</button>
         </div>
+
         <div class="drive-metrics">
           <div><span>Remaining</span><strong id="driveRemaining">-- mi</strong></div>
           <div><span>ETA</span><strong id="driveEta">--</strong></div>
           <div><span>Speed</span><strong id="driveSpeed">-- mph</strong></div>
         </div>
+
         <div class="drive-progress-track"><div id="driveProgressBar"></div></div>
+
         <div class="drive-actions">
           <button id="followDriveBtn" class="primary">◎ Follow me</button>
           <button id="pauseDemoBtn" class="hidden">⏸ Pause simulation</button>
+        </div>
+
+        <div class="voice-toolbar">
+          <div>
+            <span class="voice-label">VOICE</span>
+            <strong id="voiceModeLabel">Standard voice</strong>
+          </div>
+          <div class="voice-toolbar-buttons">
+            <button id="voiceToggleBtn">🔊 Voice on</button>
+            <button id="voiceSetupBtn">🎙️ My voice</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="voiceSetupPanel" class="voice-setup hidden">
+        <div class="voice-setup-head">
+          <div>
+            <strong>🎙️ RoadCast Voice Setup</strong>
+            <div class="check-sub">Your ElevenLabs voice ID is already built into RoadCast.</div>
+          </div>
+          <button id="closeVoiceSetupBtn" aria-label="Close voice setup">✕</button>
+        </div>
+
+        <div class="voice-id-chip">Voice ID: <strong>4hgEYmHo3owVoJYwXakA</strong></div>
+
+        <label class="voice-field">
+          <span>Supabase project URL</span>
+          <input id="voiceProjectUrl" placeholder="https://your-project-ref.supabase.co" autocomplete="off" />
+        </label>
+
+        <label class="voice-field">
+          <span>RoadCast voice token</span>
+          <input id="voiceClientToken" type="password" placeholder="The private token you create in Supabase" autocomplete="off" />
+        </label>
+
+        <div class="voice-setup-actions">
+          <button id="saveVoiceSetupBtn" class="primary">Save My Voice</button>
+          <button id="testVoiceBtn">▶ Test My Voice</button>
+          <button id="useStandardVoiceBtn">Use Standard Voice</button>
+        </div>
+
+        <div id="voiceSetupStatus" class="check-sub">
+          Your ElevenLabs API key never belongs in this page or in GitHub.
         </div>
       </div>
 
@@ -124,5 +180,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="app.js?v=0.2.1"></script>
   <script src="places-reroute-patch.js?v=0.3.0"></script>
+  <script src="nav-voice-patch.js?v=0.4.0"></script>
 </body>
 </html>

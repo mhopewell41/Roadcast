@@ -1,0 +1,126 @@
+
+.next-turn-card {
+  margin: 12px 0;
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 22px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(30,104,230,.98), rgba(21,69,154,.98));
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(0,0,0,.20);
+}
+.next-turn-icon {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: rgba(0,0,0,.17);
+  font-size: 36px;
+}
+.next-turn-copy { min-width: 0; }
+.next-turn-distance {
+  font-size: 13px;
+  opacity: .88;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 2px;
+}
+.next-turn-copy strong {
+  display: block;
+  font-size: 22px;
+  line-height: 1.08;
+}
+.next-turn-road {
+  margin-top: 4px;
+  font-size: 14px;
+  opacity: .90;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-toolbar {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,.10);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.voice-label {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .8px;
+}
+.voice-toolbar-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.voice-toolbar-buttons button { padding: 10px 12px; }
+
+.voice-setup {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(13,27,44,.98);
+  border: 1px solid rgba(47,128,237,.45);
+}
+.voice-setup-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.voice-setup-head button { padding: 8px 11px; }
+.voice-id-chip {
+  margin: 12px 0;
+  background: rgba(47,128,237,.15);
+  border: 1px solid rgba(47,128,237,.35);
+  border-radius: 14px;
+  padding: 10px 12px;
+  word-break: break-all;
+}
+.voice-field {
+  display: block;
+  margin-top: 12px;
+}
+.voice-field span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.voice-field input {
+  width: 100%;
+}
+.voice-setup-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.voice-setup-actions button {
+  flex: 1;
+  min-width: 150px;
+}
+
+@media (max-width: 620px) {
+  .next-turn-card {
+    grid-template-columns: 58px 1fr;
+    padding: 11px 12px;
+  }
+  .next-turn-icon {
+    width: 54px;
+    height: 54px;
+    font-size: 31px;
+  }
+  .next-turn-copy strong { font-size: 19px; }
+}
