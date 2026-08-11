@@ -20,7 +20,7 @@
         <h1>ROADCAST</h1>
         <p>Know the weather you are driving into.</p>
       </div>
-      <span class="badge">MVP 0.2.1</span>
+      <span class="badge">MVP 0.3</span>
     </header>
 
     <section>
@@ -35,7 +35,7 @@
     <section>
       <h2>Where are you going?</h2>
       <div class="search-row">
-        <input id="destinationInput" placeholder="City or town, such as Nashville, TN" autocomplete="off" />
+        <input id="destinationInput" placeholder="Business, address, city or place, such as Walmart or Nashville, TN" autocomplete="off" />
         <button id="findBtn" class="primary">Find</button>
       </div>
       <div id="searchResults" class="results"></div>
@@ -85,7 +85,7 @@
           </div>
         </div>
       </div>
-      <div class="map-note">Map data © OpenStreetMap contributors • Prototype tile usage only</div>
+      <div class="map-note">Map data © OpenStreetMap contributors • Prototype tile/search usage only</div>
 
       <div id="driveLaunch" class="drive-launch">
         <button id="startDriveBtn" class="primary">🧭 START ROADCAST</button>
@@ -117,11 +117,12 @@
     </section>
 
     <footer class="card footnote">
-      🧪 Prototype: Open-Meteo weather/geocoding + OSRM routing + OpenStreetMap tiles. Replace public routing/tile endpoints before a commercial launch.
+      🧪 Prototype: Open-Meteo weather + Nominatim/OSM destination search + OSRM routing + OpenStreetMap tiles. Public prototype endpoints must be replaced before commercial launch.
     </footer>
   </main>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="app.js?v=0.2.1"></script>
+  <script src="places-reroute-patch.js?v=0.3.0"></script>
 </body>
 </html>
