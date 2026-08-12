@@ -1,12 +1,14 @@
-const CACHE = 'roadcast-shell-v5';
+const CACHE = 'roadcast-shell-v6';
 const SHELL = [
   './',
   './index.html',
   './styles.css?v=0.2.1',
   './nav-voice.css?v=0.4.0',
+  './drive-experience.css?v=0.4.1',
   './app.js?v=0.2.1',
   './places-reroute-patch.js?v=0.3.0',
-  './nav-voice-patch.js?v=0.4.0',
+  './nav-voice-patch.js?v=0.4.1',
+  './drive-experience-patch.js?v=0.4.1',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'

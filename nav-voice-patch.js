@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.4.0';
+  const VERSION = '0.4.1';
   const ROADCAST_VOICE_ID = '4hgEYmHo3owVoJYwXakA';
   const CONFIG_KEY = 'roadcast_voice_config_v1';
   const MODE_KEY = 'roadcast_voice_mode_v1';
@@ -428,10 +428,18 @@
     nav.lastWeatherSpeechKey = key;
     nav.lastWeatherSpeechAt = now;
 
-    let spoken = title;
+    let spoken = `${title}.`;
     const mi = detail.match(/(\d+(?:\.\d+)?)\s*mi/i);
-    if (mi) spoken += `, about ${mi[1]} miles ahead`;
-    queueSpeech(spoken + '.', { priority: /severe|thunder|hail|ice/.test(lower), dedupeMs: 120000 });
+    if (mi) {
+      const miAhead = Number(mi[1]);
+      spoken += ` About ${miAhead} miles ahead.`;
+      const totalMi = state?.trip?.route?.distance ? state.trip.route.distance / 1609.344 : 0;
+      if (totalMi > 0 && state?.trip?.route?.duration) {
+        const minutes = Math.max(1, Math.round((state.trip.route.duration * (miAhead / totalMi)) / 60));
+        spoken += ` RoadCast estimates you will reach it in about ${minutes} minute${minutes === 1 ? '' : 's'}.`;
+      }
+    }
+    queueSpeech(spoken, { priority: /severe|thunder|hail|ice/.test(lower), dedupeMs: 120000 });
   };
 
   // Reset / intro behavior around drive mode.
@@ -503,8 +511,16 @@
   if (ui.voiceClientToken) ui.voiceClientToken.value = savedConfig.token || '';
   updateVoiceUi();
 
+  // Small public API for RoadCast feature patches such as the weather test button.
+  window.RoadCastVoice = {
+    speak(text, options = {}) { queueSpeech(text, options); },
+    stop() { stopSpeech(); },
+    mode() { return getVoiceMode(); },
+    voiceId: ROADCAST_VOICE_ID,
+  };
+
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.4';
+  if (badge) badge.textContent = 'MVP 0.4.1';
 
   console.info(`RoadCast navigation + voice patch ${VERSION} loaded with voice ${ROADCAST_VOICE_ID}`);
 })();
