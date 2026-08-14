@@ -1,12 +1,15 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.5.0';
-  const OFF_ROUTE_THRESHOLD_METERS = 120;
-  const OFF_ROUTE_SUSTAIN_MS = 6000;
-  const REROUTE_COOLDOWN_MS = 30000;
+  const VERSION = '0.6.1';
+  const SOFT_OFF_ROUTE_METERS = 45;
+  const NORMAL_OFF_ROUTE_METERS = 75;
+  const HARD_OFF_ROUTE_METERS = 150;
+  const HEADING_DIVERGENCE_DEGREES = 38;
+  const REROUTE_COOLDOWN_MS = 20000;
 
   let offRouteSince = null;
+  let rerouteReason = '';
   let rerouting = false;
   let lastRerouteAt = 0;
   let noticeShown = false;
@@ -37,6 +40,7 @@
     if (rerouting || !state?.destination || !state?.driveActive || state.driveDemo) return;
 
     rerouting = true;
+    window.__roadcastRerouting = true;
     lastRerouteAt = Date.now();
     offRouteSince = null;
     noticeShown = false;
@@ -117,15 +121,23 @@
     } finally {
       rerouting = false;
       offRouteSince = null;
+      rerouteReason = '';
+      setTimeout(() => { window.__roadcastRerouting = false; }, 1200);
     }
   }
 
-  const priorUpdateReroute050 = updateDrivePosition;
+  function angleDifference(a, b) {
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+    return Math.abs(((a - b + 540) % 360) - 180);
+  }
+
+  const priorUpdateReroute061 = updateDrivePosition;
   updateDrivePosition = function(raw, gpsHeading, speedMps, demoMode) {
-    const result = priorUpdateReroute050(raw, gpsHeading, speedMps, demoMode);
+    const result = priorUpdateReroute061(raw, gpsHeading, speedMps, demoMode);
 
     if (demoMode || rerouting || !state?.driveActive || !state?.trip || !raw) {
       offRouteSince = null;
+      rerouteReason = '';
       noticeShown = false;
       return result;
     }
@@ -133,25 +145,54 @@
     const located = state.driveProgress || locateOnRoute(state.trip.route, raw);
     if (!located) return result;
 
-    const moving = Number(speedMps || 0) > 2.0;
-    const farEnough = located.offRoute > OFF_ROUTE_THRESHOLD_METERS;
+    const speed = Number(speedMps || 0);
+    const moving = speed > 2.0;
+    const off = Number(located.offRoute || 0);
+    const routeHeading = Number(located.heading);
+    const userHeading = Number(gpsHeading);
+    const headingDelta = angleDifference(userHeading, routeHeading);
+    const headingValid = Number.isFinite(userHeading) && userHeading >= 0 && moving;
+    const diverging = headingValid && headingDelta >= HEADING_DIVERGENCE_DEGREES;
 
-    if (farEnough && (moving || located.offRoute > 220)) {
-      if (!offRouteSince) offRouteSince = Date.now();
+    let candidate = false;
+    let sustainMs = 4500;
+    let reason = '';
+
+    if (off >= HARD_OFF_ROUTE_METERS) {
+      candidate = true;
+      sustainMs = 1700;
+      reason = 'well off route';
+    } else if (off >= NORMAL_OFF_ROUTE_METERS) {
+      candidate = true;
+      sustainMs = diverging ? 2400 : 4000;
+      reason = diverging ? 'different direction' : 'alternate road';
+    } else if (off >= SOFT_OFF_ROUTE_METERS && diverging) {
+      candidate = true;
+      sustainMs = 2800;
+      reason = 'missed turn';
+    }
+
+    if (candidate && moving) {
+      if (!offRouteSince || rerouteReason !== reason) {
+        offRouteSince = Date.now();
+        rerouteReason = reason;
+        noticeShown = false;
+      }
 
       const elapsed = Date.now() - offRouteSince;
       const cooledDown = Date.now() - lastRerouteAt >= REROUTE_COOLDOWN_MS;
 
-      if (elapsed >= 2500 && !noticeShown) {
+      if (elapsed >= 1600 && !noticeShown) {
         noticeShown = true;
         if (els.driveStatus) els.driveStatus.textContent = 'LIVE GPS • alternate road detected';
       }
 
-      if (elapsed >= OFF_ROUTE_SUSTAIN_MS && cooledDown) {
+      if (elapsed >= sustainMs && cooledDown) {
         rebuildFromCurrentGps(raw);
       }
     } else {
       offRouteSince = null;
+      rerouteReason = '';
       noticeShown = false;
     }
 
@@ -159,6 +200,6 @@
   };
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.5';
+  if (badge) badge.textContent = 'MVP 0.6.1';
   console.info(`RoadCast personality reroute ${VERSION} loaded.`);
 })();

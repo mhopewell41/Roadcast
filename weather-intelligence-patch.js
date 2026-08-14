@@ -1,11 +1,11 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.5.0';
+  const VERSION = '0.6.1';
   const REFRESH_MS = 2 * 60 * 1000;
   const MIN_POINTS = 7;
   const MAX_POINTS = 18;
-  const WEATHER_LAYER_KEY = 'liveWeatherLayer050';
+  const WEATHER_LAYER_KEY = 'liveWeatherLayer061';
 
   const wx = {
     timer: null,
@@ -13,6 +13,7 @@
     lastAlertKey: '',
     lastAlertAt: 0,
     lastWetNow: false,
+    lastSummaryText: '',
   };
 
   const wetCodes = new Set([51,53,55,56,57,61,63,65,66,67,71,73,75,77,80,81,82,85,86,95,96,99]);
@@ -143,6 +144,52 @@
     });
   }
 
+  function buildWeatherSummary(checkpoints, currentProgress, route) {
+    if (!Array.isArray(checkpoints) || !checkpoints.length) {
+      return 'RoadCast weather check is active. I will keep checking the route every two minutes.';
+    }
+
+    const now = checkpoints[0].weather || {};
+    const destinationWeather = checkpoints[checkpoints.length - 1]?.weather || now;
+    const [, nowLabel] = description(now);
+    const temp = Math.round(Number(now.temp || 0));
+    const feels = Math.round(Number(now.feels || temp));
+    const destinationTemp = Math.round(Number(destinationWeather.temp || temp));
+    const firstWet = checkpoints.slice(1).find(c => isWet(c.weather || {}));
+    const destinationName = state.destination?.name || 'your destination';
+
+    let text = `Weather check. It is ${temp} degrees where you are`;
+    if (Math.abs(feels - temp) >= 4) text += `, but it feels like ${feels}`;
+    text += `. Conditions are ${String(nowLabel || 'steady').toLowerCase()}.`;
+
+    if (firstWet) {
+      const fractionAhead = Math.max(0, firstWet.progress - currentProgress);
+      const miAhead = (route.distance * fractionAhead) / 1609.344;
+      const minutesAhead = Math.max(1, Math.round(route.duration * fractionAhead / 60));
+      const [, wetLabel] = description(firstWet.weather || {});
+      text += ` ${wetLabel} is showing about ${miAhead.toFixed(miAhead < 10 ? 1 : 0)} miles ahead, roughly ${minutesAhead} minutes from you.`;
+    } else {
+      text += ` No rain or other significant weather is showing on the route to ${destinationName} right now.`;
+    }
+
+    text += ` Around the destination, the temperature is about ${destinationTemp} degrees. I will keep checking every two minutes.`;
+    return text;
+  }
+
+  function speakWeatherSummary(checkpoints = state.trip?.checkpoints, currentProgress = state.driveProgress?.progress || 0, route = state.trip?.route) {
+    if (!route || !checkpoints?.length) {
+      const fallback = 'RoadCast weather monitoring is on. I will keep checking the route every two minutes.';
+      wx.lastSummaryText = fallback;
+      window.RoadCastVoice?.speak(fallback, { dedupeMs: 5000 });
+      return fallback;
+    }
+
+    const text = buildWeatherSummary(checkpoints, currentProgress, route);
+    wx.lastSummaryText = text;
+    window.RoadCastVoice?.speak(text, { priority: false, dedupeMs: 5000 });
+    return text;
+  }
+
   function announceWeather(checkpoints, currentProgress, route) {
     if (!checkpoints.length) return;
 
@@ -239,10 +286,20 @@
       try { renderAlert(route, checkpoints); } catch {}
       try { renderTimeline(route, checkpoints); } catch {}
       updateLiveMarkers(checkpoints);
-      announceWeather(checkpoints, current, route);
+
+      if (reason === 'start' && !window.__roadcastRerouting) {
+        speakWeatherSummary(checkpoints, current, route);
+      } else {
+        announceWeather(checkpoints, current, route);
+      }
     } catch (err) {
       console.warn('RoadCast smart weather refresh failed.', err);
       if (status) status.textContent = '🌦️ Live road weather check delayed • retrying';
+      if (reason === 'start' && !window.__roadcastRerouting) {
+        const message = 'RoadCast weather monitoring is on, but the first live weather refresh was delayed. I will try again in two minutes.';
+        wx.lastSummaryText = message;
+        window.RoadCastVoice?.speak(message, { dedupeMs: 5000 });
+      }
     } finally {
       wx.refreshing = false;
     }
@@ -270,7 +327,27 @@
     return priorStopWeather050(...args);
   };
 
+  window.RoadCastWeather = {
+    summaryText() {
+      if (wx.lastSummaryText) return wx.lastSummaryText;
+      if (state.trip?.route && state.trip?.checkpoints?.length) {
+        wx.lastSummaryText = buildWeatherSummary(
+          state.trip.checkpoints,
+          state.driveProgress?.progress || 0,
+          state.trip.route
+        );
+      }
+      return wx.lastSummaryText || 'RoadCast weather monitoring is active.';
+    },
+    speakSummary() {
+      return speakWeatherSummary();
+    },
+    refresh() {
+      return refresh('manual');
+    },
+  };
+
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.5';
+  if (badge) badge.textContent = 'MVP 0.6.1';
   console.info(`RoadCast 15-minute weather intelligence ${VERSION} loaded.`);
 })();
