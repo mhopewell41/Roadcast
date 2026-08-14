@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.5.0';
+  const VERSION = '0.6.0';
   const ROADCAST_VOICE_ID = '4hgEYmHo3owVoJYwXakA';
   const CONFIG_KEY = 'roadcast_voice_config_v1';
   const MODE_KEY = 'roadcast_voice_mode_v1';
@@ -339,6 +339,15 @@
   }
 
   function humanInstruction(step, includeDistance = false, meters = 0) {
+    if (step?._googleInstruction) {
+      const clean = String(step._googleInstruction).replace(/\n+/g, '. ').replace(/\s+/g, ' ').trim().replace(/[.]+$/, '');
+      const spoken = clean ? clean.charAt(0).toLowerCase() + clean.slice(1) : '';
+      if (includeDistance && String(step?.maneuver?.type || '').toLowerCase() !== 'arrive') {
+        return `In ${spokenDistance(meters)}, ${spoken}.`;
+      }
+      return clean ? `${clean}.` : 'Continue.';
+    }
+
     const man = step?.maneuver || {};
     const type = String(man.type || '').toLowerCase();
     const mod = String(man.modifier || '').toLowerCase();
@@ -602,7 +611,7 @@
   };
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.5';
+  if (badge) badge.textContent = 'MVP 0.6';
 
   console.info(`RoadCast navigation + voice patch ${VERSION} loaded with voice ${ROADCAST_VOICE_ID}`);
 })();
