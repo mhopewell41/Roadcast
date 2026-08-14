@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.4.4';
+  const VERSION = '0.5.0';
   const OFF_ROUTE_THRESHOLD_METERS = 120;
   const OFF_ROUTE_SUSTAIN_MS = 6000;
   const REROUTE_COOLDOWN_MS = 30000;
@@ -10,6 +10,28 @@
   let rerouting = false;
   let lastRerouteAt = 0;
   let noticeShown = false;
+  let lastJokeIndex = -1;
+
+  const rerouteLines = [
+    'I see we are freelancing the route today. No problem. Recalculating.',
+    'Bold choice. You have selected the scenic option. Rerouting.',
+    'That was not the road I picked, but I admire the confidence. Recalculating.',
+    'Plot twist. We are going this way now. Rerouting.',
+    'You clearly had your own plan. Respect. Finding another route.',
+    'RoadCast has noted your creative interpretation of directions. Recalculating.',
+    'Well, that turn was optional apparently. Let me find us another way.',
+    'I had a route. You had a vision. Rerouting.',
+    'Unexpected road choice detected. I will pretend we planned that. Recalculating.',
+    'All right, captain. Your road it is. Finding a new route.',
+  ];
+
+  function nextRerouteLine() {
+    if (rerouteLines.length === 1) return rerouteLines[0];
+    let index = Math.floor(Math.random() * rerouteLines.length);
+    if (index === lastJokeIndex) index = (index + 1) % rerouteLines.length;
+    lastJokeIndex = index;
+    return rerouteLines[index];
+  }
 
   async function rebuildFromCurrentGps(raw) {
     if (rerouting || !state?.destination || !state?.driveActive || state.driveDemo) return;
@@ -18,25 +40,25 @@
     lastRerouteAt = Date.now();
     offRouteSince = null;
     noticeShown = false;
+
     const destinationName = state.destination?.name || 'your destination';
 
     try {
-      els.driveOverlay?.classList.remove('hidden', 'severe');
+      if (els.driveOverlay) els.driveOverlay.classList.remove('hidden', 'severe');
       if (els.driveOverlayIcon) els.driveOverlayIcon.textContent = '🔄';
       if (els.driveOverlayTitle) els.driveOverlayTitle.textContent = 'Different road detected — rerouting';
-      if (els.driveOverlayDetail) els.driveOverlayDetail.textContent = `Finding a new route from here to ${destinationName}...`;
+      if (els.driveOverlayDetail) {
+        els.driveOverlayDetail.textContent = `Finding a new route from here to ${destinationName}...`;
+      }
       if (els.driveStatus) els.driveStatus.textContent = 'LIVE GPS • rerouting';
 
-      window.RoadCastVoice?.speak(
-        `Rerouting. I am finding another way to ${destinationName}.`,
-        { priority: true, dedupeMs: 5000 }
-      );
+      window.RoadCastVoice?.speak(nextRerouteLine(), { priority: true, dedupeMs: 1000 });
 
       const route = await getRoute(raw, state.destination);
       buildRouteMetrics(route);
 
       const departure = new Date();
-      const count = Math.max(4, Math.min(8, Math.ceil(route.duration / 2700) + 1));
+      const count = Math.max(5, Math.min(10, Math.ceil(route.duration / 1800) + 1));
       const points = sampleRoute(route.points, count);
       const checkpoints = points.map((point, i) => {
         const progress = i / (count - 1);
@@ -54,7 +76,11 @@
 
       checkpoints.forEach((c, i) => {
         c.weather = weather[i];
-        c.label = i === 0 ? 'Current location' : i === count - 1 ? destinationName : `Road checkpoint ${i}`;
+        c.label = i === 0
+          ? 'Current location'
+          : i === count - 1
+            ? destinationName
+            : `Road checkpoint ${i}`;
       });
 
       state.start = { lat: raw.lat, lon: raw.lon };
@@ -72,33 +98,31 @@
       if (els.driveOverlay) els.driveOverlay.classList.remove('hidden', 'severe');
       if (els.driveOverlayIcon) els.driveOverlayIcon.textContent = '✅';
       if (els.driveOverlayTitle) els.driveOverlayTitle.textContent = 'New route active';
-      if (els.driveOverlayDetail) els.driveOverlayDetail.textContent = 'RoadCast adjusted to the way you chose.';
+      if (els.driveOverlayDetail) {
+        els.driveOverlayDetail.textContent = 'RoadCast adjusted to the route you chose.';
+      }
 
       window.RoadCastVoice?.speak(
-        'Route updated. Continue on the highlighted route.',
-        { priority: false, dedupeMs: 5000 }
+        'New route is ready. Continue on the highlighted road.',
+        { dedupeMs: 3000 }
       );
-
-      setTimeout(() => {
-        if (state.driveActive && state.driveProgress) {
-          try { updateDriveAlert(state.driveProgress, false); } catch {}
-        }
-      }, 2500);
     } catch (err) {
       console.error('RoadCast fast reroute error', err);
       if (els.driveOverlay) els.driveOverlay.classList.remove('hidden');
       if (els.driveOverlayIcon) els.driveOverlayIcon.textContent = '⚠️';
       if (els.driveOverlayTitle) els.driveOverlayTitle.textContent = 'Reroute delayed';
-      if (els.driveOverlayDetail) els.driveOverlayDetail.textContent = 'RoadCast will keep using your GPS and try again shortly.';
+      if (els.driveOverlayDetail) {
+        els.driveOverlayDetail.textContent = 'RoadCast will keep following your GPS and try again.';
+      }
     } finally {
       rerouting = false;
       offRouteSince = null;
     }
   }
 
-  const priorUpdateReroute044 = updateDrivePosition;
+  const priorUpdateReroute050 = updateDrivePosition;
   updateDrivePosition = function(raw, gpsHeading, speedMps, demoMode) {
-    const result = priorUpdateReroute044(raw, gpsHeading, speedMps, demoMode);
+    const result = priorUpdateReroute050(raw, gpsHeading, speedMps, demoMode);
 
     if (demoMode || rerouting || !state?.driveActive || !state?.trip || !raw) {
       offRouteSince = null;
@@ -114,6 +138,7 @@
 
     if (farEnough && (moving || located.offRoute > 220)) {
       if (!offRouteSince) offRouteSince = Date.now();
+
       const elapsed = Date.now() - offRouteSince;
       const cooledDown = Date.now() - lastRerouteAt >= REROUTE_COOLDOWN_MS;
 
@@ -134,7 +159,6 @@
   };
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.4.4';
-
-  console.info(`RoadCast alternate-route reroute patch ${VERSION} loaded.`);
+  if (badge) badge.textContent = 'MVP 0.5';
+  console.info(`RoadCast personality reroute ${VERSION} loaded.`);
 })();

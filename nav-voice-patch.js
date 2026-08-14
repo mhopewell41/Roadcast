@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.4.1';
+  const VERSION = '0.5.0';
   const ROADCAST_VOICE_ID = '4hgEYmHo3owVoJYwXakA';
   const CONFIG_KEY = 'roadcast_voice_config_v1';
   const MODE_KEY = 'roadcast_voice_mode_v1';
@@ -11,9 +11,13 @@
     announcedStages: new Map(),
     voiceQueue: Promise.resolve(),
     activeAudio: null,
+    activeResolve: null,
+    speechItems: [],
+    speechRunning: false,
     lastSpeech: new Map(),
     lastWeatherSpeechKey: '',
     lastWeatherSpeechAt: 0,
+    audioContext: null,
   };
 
   const $v = id => document.getElementById(id);
@@ -69,12 +73,22 @@
     ui.voiceToggleBtn.textContent = mode === 'silent' ? '🔇 Voice off' : '🔊 Voice on';
   }
 
-  function stopSpeech() {
+  function finishActiveSpeech() {
+    const done = nav.activeResolve;
+    nav.activeResolve = null;
+    if (done) {
+      try { done(); } catch {}
+    }
+  }
+
+  function stopSpeech(clearPending = false) {
     try { speechSynthesis.cancel(); } catch {}
     if (nav.activeAudio) {
       try { nav.activeAudio.pause(); } catch {}
       nav.activeAudio = null;
     }
+    finishActiveSpeech();
+    if (clearPending) nav.speechItems.length = 0;
   }
 
   function standardSpeak(text) {
@@ -84,11 +98,19 @@
         return;
       }
       const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.02;
+      u.rate = 0.98;
       u.pitch = 1.0;
       u.volume = 1.0;
-      u.onend = resolve;
-      u.onerror = resolve;
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (nav.activeResolve === finish) nav.activeResolve = null;
+        resolve();
+      };
+      nav.activeResolve = finish;
+      u.onend = finish;
+      u.onerror = finish;
       speechSynthesis.speak(u);
     });
   }
@@ -122,22 +144,54 @@
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
 
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const audio = new Audio(url);
+      audio.preload = 'auto';
+      audio.volume = 1.0;
       nav.activeAudio = audio;
-      audio.onended = () => {
+
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
         URL.revokeObjectURL(url);
         if (nav.activeAudio === audio) nav.activeAudio = null;
+        if (nav.activeResolve === finish) nav.activeResolve = null;
         resolve();
       };
+      nav.activeResolve = finish;
+
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          if (!nav.audioContext) nav.audioContext = new AudioCtx();
+          if (nav.audioContext.state === 'suspended') await nav.audioContext.resume();
+          const source = nav.audioContext.createMediaElementSource(audio);
+          const gain = nav.audioContext.createGain();
+          gain.gain.value = 1.32;
+          source.connect(gain);
+          gain.connect(nav.audioContext.destination);
+        }
+      } catch (err) {
+        console.warn('RoadCast voice boost unavailable; using normal volume.', err);
+      }
+
+      audio.onended = finish;
       audio.onerror = () => {
+        if (finished) return;
+        finished = true;
         URL.revokeObjectURL(url);
         if (nav.activeAudio === audio) nav.activeAudio = null;
+        if (nav.activeResolve === finish) nav.activeResolve = null;
         reject(new Error('Could not play the generated voice audio.'));
       };
+
       audio.play().catch(err => {
+        if (finished) return;
+        finished = true;
         URL.revokeObjectURL(url);
         if (nav.activeAudio === audio) nav.activeAudio = null;
+        if (nav.activeResolve === finish) nav.activeResolve = null;
         reject(err);
       });
     });
@@ -163,20 +217,46 @@
     await standardSpeak(text);
   }
 
+  async function runSpeechQueue() {
+    if (nav.speechRunning) return;
+    nav.speechRunning = true;
+
+    try {
+      while (nav.speechItems.length) {
+        const item = nav.speechItems.shift();
+        try {
+          await speakNow(item.text, item.opts);
+        } catch (err) {
+          console.warn('RoadCast speech item failed.', err);
+        }
+        await new Promise(resolve => setTimeout(resolve, 120));
+      }
+    } finally {
+      nav.speechRunning = false;
+    }
+  }
+
   function queueSpeech(text, opts = {}) {
+    const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!cleaned) return;
+
     const now = Date.now();
-    const dedupeKey = String(text).toLowerCase().replace(/\s+/g, ' ').trim();
+    const dedupeKey = cleaned.toLowerCase();
     const previous = nav.lastSpeech.get(dedupeKey) || 0;
     const dedupeMs = opts.dedupeMs ?? 15000;
     if (now - previous < dedupeMs) return;
     nav.lastSpeech.set(dedupeKey, now);
 
-    if (opts.priority) {
-      stopSpeech();
-      nav.voiceQueue = Promise.resolve().then(() => speakNow(text, opts)).catch(() => {});
+    if (opts.interrupt === true) {
+      stopSpeech(false);
+      nav.speechItems.unshift({ text: cleaned, opts });
+    } else if (opts.priority) {
+      nav.speechItems.unshift({ text: cleaned, opts });
     } else {
-      nav.voiceQueue = nav.voiceQueue.then(() => speakNow(text, opts)).catch(() => {});
+      nav.speechItems.push({ text: cleaned, opts });
     }
+
+    runSpeechQueue();
   }
 
   function normalizeProjectUrl(value) {
@@ -366,7 +446,7 @@
         stages.add('near');
       }
       if (meters <= 70 && !stages.has('now')) {
-        queueSpeech(humanInstruction(step, false, meters), { priority: true, dedupeMs: 45000 });
+        queueSpeech(humanInstruction(step, false, meters), { priority: true, interrupt: true, dedupeMs: 45000 });
         stages.add('now');
       }
     }
@@ -463,7 +543,7 @@
   const priorStopDrive = stopDrive;
   stopDrive = function(...args) {
     const result = priorStopDrive(...args);
-    stopSpeech();
+    stopSpeech(true);
     ui.nextTurnCard?.classList.add('hidden');
     return result;
   };
@@ -476,7 +556,7 @@
       setVoiceMode(cfg.projectUrl && cfg.token ? 'myvoice' : 'standard');
       queueSpeech('Voice guidance on.', { priority: true, dedupeMs: 1000 });
     } else {
-      stopSpeech();
+      stopSpeech(true);
       setVoiceMode('silent');
     }
   });
@@ -499,7 +579,7 @@
   ui.testVoiceBtn?.addEventListener('click', testMyVoice);
 
   ui.useStandardVoiceBtn?.addEventListener('click', () => {
-    stopSpeech();
+    stopSpeech(true);
     setVoiceMode('standard');
     ui.voiceSetupStatus.textContent = 'Standard phone voice selected.';
     queueSpeech('Standard RoadCast voice selected.', { priority: true, dedupeMs: 1000 });
@@ -514,13 +594,15 @@
   // Small public API for RoadCast feature patches such as the weather test button.
   window.RoadCastVoice = {
     speak(text, options = {}) { queueSpeech(text, options); },
-    stop() { stopSpeech(); },
+    stop(clearPending = true) { stopSpeech(clearPending); },
     mode() { return getVoiceMode(); },
+    busy() { return nav.speechRunning || !!nav.activeAudio || nav.speechItems.length > 0; },
     voiceId: ROADCAST_VOICE_ID,
+    gain: 1.32,
   };
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.4.1';
+  if (badge) badge.textContent = 'MVP 0.5';
 
   console.info(`RoadCast navigation + voice patch ${VERSION} loaded with voice ${ROADCAST_VOICE_ID}`);
 })();
