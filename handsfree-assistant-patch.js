@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.2';
+  const VERSION = '0.7.0';
   const ENABLED_KEY = 'roadcast_handsfree_enabled_v1';
   const LISTEN_MS = 7000;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -197,7 +197,7 @@
   }
 
   function speak(text, options = {}) {
-    window.RoadCastVoice?.speak(text, { dedupeMs: 1000, ...options });
+    window.RoadCastVoice?.speak(text, { category: 'info', dedupeMs: 1000, ...options });
   }
 
   function etaReply() {
@@ -235,10 +235,22 @@
       return;
     }
 
+    const voiceMatch = text.match(/\b(?:switch|change|use)\s+(?:the\s+)?(?:voice\s+to\s+)?(.+?)(?:\s+voice)?$/i);
+    if (voiceMatch && window.RoadCastFamily?.selectProfileByName) {
+      const requested = voiceMatch[1].replace(/^to\s+/i, '').trim();
+      const result = window.RoadCastFamily.selectProfileByName(requested);
+      if (result?.ok) {
+        speak(`All right. ${result.name} is driving the voice now.`, { category: 'info', force: true });
+      } else {
+        speak(`I could not find a saved voice named ${requested}.`, { category: 'info', force: true });
+      }
+      return;
+    }
+
     if (/\b(weather|rain|storm|temperature|forecast|conditions|outside)\b/.test(text)) {
       setStatus('Weather requested...', 'heard');
       if (window.RoadCastWeather?.speakSummary) {
-        window.RoadCastWeather.speakSummary({ force: true });
+        window.RoadCastWeather.speakSummary({ force: true, category: 'weather' });
       } else {
         speak(weatherReply(), { force: true });
       }
@@ -311,17 +323,14 @@
     }
 
     if (/\b(help|what can i say|commands)\b/.test(text)) {
-      speak('Try weather, traffic, ETA, repeat that, destination, recenter, route overview, zoom in, zoom out, north up, or mute.');
+      speak('Try weather, traffic, ETA, repeat that, destination, recenter, route overview, zoom in, zoom out, switch voice to a saved profile, give me attitude, north up, or mute.');
       return;
     }
 
-    if (/\b(give me attitude|make me laugh|sarcasm|be sarcastic)\b/.test(text)) {
-      const lines = [
-        'I am saving the premium sarcasm for your next missed turn.',
-        'RoadCast is fully prepared to judge your navigation choices respectfully.',
-        'I provide directions. Whether you follow them is apparently a separate subscription.',
-      ];
-      speak(lines[Math.floor(Math.random() * lines.length)]);
+    if (/\b(give me attitude|make me laugh|sarcasm|be sarcastic|say something smart)\b/.test(text)) {
+      const line = window.RoadCastFamily?.randomAttitudeLine?.()
+        || 'I provide directions. Whether you follow them is apparently a separate subscription.';
+      speak(line, { category: 'personality', force: true });
       return;
     }
 
@@ -361,7 +370,7 @@
   ensureUi();
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.6.2';
+  if (badge) badge.textContent = 'MVP 0.7';
 
   console.info(`RoadCast hands-free reply window ${VERSION} loaded.`);
 })();

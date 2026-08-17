@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.2';
+  const VERSION = '0.7.0';
   const CONFIG_KEY = 'roadcast_voice_config_v1';
   const OPTIONS_KEY = 'roadcast_route_options_v1';
 
@@ -381,9 +381,9 @@
     if (traffic.announcedTripKey === key) return;
     traffic.announcedTripKey = key;
     if (delay >= 8) {
-      window.RoadCastVoice?.speak(`Traffic is adding about ${delay} minutes to this trip. I will keep watching for a faster route.`, { dedupeMs: 300000 });
+      window.RoadCastVoice?.speak(`Traffic is adding about ${delay} minutes to this trip. I will keep watching for a faster route.`, { category: 'traffic', dedupeMs: 300000 });
     } else if (delay >= 4) {
-      window.RoadCastVoice?.speak(`There is some traffic ahead, adding roughly ${delay} minutes.`, { dedupeMs: 300000 });
+      window.RoadCastVoice?.speak(`There is some traffic ahead, adding roughly ${delay} minutes.`, { category: 'traffic', dedupeMs: 300000 });
     }
   }
 
@@ -436,6 +436,6 @@
 
   ensureTrafficUi();
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.6.2';
+  if (badge) badge.textContent = 'MVP 0.7';
   console.info(`RoadCast traffic-aware routing ${VERSION} loaded.`);
 })();

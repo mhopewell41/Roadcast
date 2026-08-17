@@ -1,10 +1,38 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.2';
-  const ROADCAST_VOICE_ID = '4hgEYmHo3owVoJYwXakA';
+  const VERSION = '0.7.0';
+  const DEFAULT_ROADCAST_VOICE_ID = '4hgEYmHo3owVoJYwXakA';
   const CONFIG_KEY = 'roadcast_voice_config_v1';
   const MODE_KEY = 'roadcast_voice_mode_v1';
+
+  const PROFILE_KEY = 'roadcast_voice_profiles_v1';
+  const SELECTED_PROFILE_KEY = 'roadcast_voice_profile_selected_v1';
+
+  function getVoiceProfiles() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(PROFILE_KEY) || '[]');
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    } catch {}
+    const defaults = [{ id: 'my-voice', name: 'My Voice', voiceId: DEFAULT_ROADCAST_VOICE_ID }];
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(defaults));
+    if (!localStorage.getItem(SELECTED_PROFILE_KEY)) {
+      localStorage.setItem(SELECTED_PROFILE_KEY, defaults[0].id);
+    }
+    return defaults;
+  }
+
+  function activeVoiceProfile() {
+    const profiles = getVoiceProfiles();
+    const selectedId = localStorage.getItem(SELECTED_PROFILE_KEY) || profiles[0]?.id;
+    return profiles.find(p => p.id === selectedId) || profiles[0] || {
+      id: 'my-voice', name: 'My Voice', voiceId: DEFAULT_ROADCAST_VOICE_ID
+    };
+  }
+
+  function activeVoiceId() {
+    return String(activeVoiceProfile()?.voiceId || DEFAULT_ROADCAST_VOICE_ID).trim();
+  }
 
   const nav = {
     currentStepKey: null,
@@ -18,6 +46,7 @@
     lastWeatherSpeechKey: '',
     lastWeatherSpeechAt: 0,
     audioContext: null,
+    speechSeq: 0,
   };
 
   const $v = id => document.getElementById(id);
@@ -66,8 +95,9 @@
   function updateVoiceUi() {
     if (!ui.voiceModeLabel) return;
     const mode = getVoiceMode();
+    const profile = activeVoiceProfile();
     ui.voiceModeLabel.textContent =
-      mode === 'myvoice' ? 'My RoadCast voice' :
+      mode === 'myvoice' ? `My RoadCast voice • ${profile.name || 'Profile'}` :
       mode === 'silent' ? 'Voice off' :
       'Standard voice';
     ui.voiceToggleBtn.textContent = mode === 'silent' ? '🔇 Voice off' : '🔊 Voice on';
@@ -130,7 +160,7 @@
         // A short leading break gives Bluetooth/car audio time to wake before
         // the first spoken word. The RoadCast UI still keeps the clean text.
         text: `<break time="0.40s" />${text}`,
-        voice_id: ROADCAST_VOICE_ID,
+        voice_id: activeVoiceId(),
       }),
     });
 
@@ -225,13 +255,25 @@
 
     try {
       while (nav.speechItems.length) {
+        sortSpeechQueue();
         const item = nav.speechItems.shift();
+
+        if (String(item?.opts?.category || '').toLowerCase() === 'personality' &&
+            shouldSuppressPersonality()) {
+          console.info('RoadCast personality line skipped because a maneuver or safety message is more important.');
+          continue;
+        }
+
+        const isSafety = String(item?.opts?.category || '').toLowerCase() === 'safety';
+        if (isSafety) window.__roadcastSafetySpeaking = true;
         try {
           await speakNow(item.text, item.opts);
         } catch (err) {
           console.warn('RoadCast speech item failed.', err);
+        } finally {
+          if (isSafety) window.__roadcastSafetySpeaking = false;
         }
-        await new Promise(resolve => setTimeout(resolve, 120));
+        await new Promise(resolve => setTimeout(resolve, 180));
       }
     } finally {
       nav.speechRunning = false;
@@ -280,6 +322,35 @@
     return parts;
   }
 
+  function speechPriority(opts = {}) {
+    const category = String(opts.category || '').toLowerCase();
+    const table = {
+      safety: 500,
+      navigation: 420,
+      reroute: 360,
+      weather: 300,
+      traffic: 280,
+      info: 220,
+      personality: 100,
+    };
+    if (category && table[category]) return table[category];
+    if (opts.priority) return 400;
+    return 220;
+  }
+
+  function shouldSuppressPersonality() {
+    const meters = Number(window.__roadcastNextTurnMeters);
+    if (Number.isFinite(meters) && meters < 500) return true;
+    if (window.__roadcastSafetySpeaking) return true;
+    return false;
+  }
+
+  function sortSpeechQueue() {
+    nav.speechItems.sort((a, b) =>
+      (b.priority - a.priority) || (a.seq - b.seq)
+    );
+  }
+
   function enqueueSpeechItem(cleaned, opts = {}) {
     const now = Date.now();
     const dedupeKey = cleaned.toLowerCase();
@@ -288,25 +359,19 @@
     if (!opts.force && now - previous < dedupeMs) return;
     nav.lastSpeech.set(dedupeKey, now);
 
-    // Priority changes queue order only. It never cuts off speech already
-    // playing. This prevents weather, navigation and reroute personality from
-    // talking over one another.
-    if (opts.priority) nav.speechItems.unshift({ text: cleaned, opts });
-    else nav.speechItems.push({ text: cleaned, opts });
+    nav.speechItems.push({
+      text: cleaned,
+      opts,
+      priority: speechPriority(opts),
+      seq: ++nav.speechSeq,
+    });
+    sortSpeechQueue();
   }
 
   function queueSpeech(text, opts = {}) {
     const parts = splitSpeechText(text);
     if (!parts.length) return;
-
-    // Preserve sentence order for priority speech while still placing the
-    // whole group ahead of normal chatter.
-    if (opts.priority && parts.length > 1) {
-      for (let i = parts.length - 1; i >= 0; i--) enqueueSpeechItem(parts[i], opts);
-    } else {
-      parts.forEach(part => enqueueSpeechItem(part, opts));
-    }
-
+    parts.forEach(part => enqueueSpeechItem(part, opts));
     runSpeechQueue();
   }
 
@@ -334,7 +399,7 @@
       return;
     }
 
-    saveVoiceConfig({ projectUrl, token, voiceId: ROADCAST_VOICE_ID });
+    saveVoiceConfig({ projectUrl, token, voiceId: activeVoiceId() });
     setVoiceMode('myvoice');
     ui.testVoiceBtn.disabled = true;
     ui.testVoiceBtn.textContent = 'Testing...';
@@ -555,10 +620,12 @@
       ui.nextTurnDistance.textContent = 'Destination ahead';
       ui.nextTurnText.textContent = state.destination?.name || 'Destination';
       ui.nextTurnRoad.textContent = '';
+      window.__roadcastNextTurnMeters = Infinity;
       return;
     }
 
     const meters = Math.max(0, (step._progress - located.progress) * (route.polylineDistance || route.distance || 0));
+    window.__roadcastNextTurnMeters = meters;
     const key = stepKey(step);
     const type = String(step?.maneuver?.type || '').toLowerCase();
 
@@ -577,14 +644,14 @@
 
     if (type === 'arrive') {
       if (meters <= 250 && !stages.has('arrive')) {
-        queueSpeech(`Your destination, ${state.destination?.name || 'your destination'}, is ahead.`, { priority: true, dedupeMs: 60000 });
+        queueSpeech(`Your destination, ${state.destination?.name || 'your destination'}, is ahead.`, { category: 'navigation', dedupeMs: 60000 });
         stages.add('arrive');
       }
     } else {
       // First guidance lands in the requested 0.3 to 0.5 mile window. If a
       // route starts closer than that, say it as soon as we safely can.
       if (meters <= 805 && meters > 55 && !stages.has('far')) {
-        queueSpeech(humanInstruction(step, true, meters), { dedupeMs: 45000 });
+        queueSpeech(humanInstruction(step, true, meters), { category: 'navigation', dedupeMs: 45000 });
         stages.add('far');
       }
 
@@ -592,14 +659,14 @@
       // quickly, include it in the same sentence so the driver is not surprised.
       if (meters <= 38 && meters > 12 && !stages.has('near')) {
         const phrase = humanInstruction(step, true, meters).replace(/[.]+$/, '') + quickTurnFollowUp(route, step);
-        queueSpeech(phrase, { priority: true, dedupeMs: 45000 });
+        queueSpeech(phrase, { category: 'navigation', dedupeMs: 45000 });
         stages.add('near');
       }
 
       // GPS can jump past the 100-foot window. In that case, give one concise
       // maneuver call, but never interrupt audio already playing.
       if (meters <= 12 && !stages.has('now')) {
-        queueSpeech(humanInstruction(step, false, meters), { priority: true, dedupeMs: 45000 });
+        queueSpeech(humanInstruction(step, false, meters), { category: 'navigation', dedupeMs: 45000 });
         stages.add('now');
       }
     }
@@ -672,7 +739,10 @@
         spoken += ` RoadCast estimates you will reach it in about ${minutes} minute${minutes === 1 ? '' : 's'}.`;
       }
     }
-    queueSpeech(spoken, { priority: /severe|thunder|hail|ice/.test(lower), dedupeMs: 120000 });
+    queueSpeech(spoken, {
+      category: /severe|thunder|hail|ice/.test(lower) ? 'safety' : 'weather',
+      dedupeMs: 120000
+    });
   };
 
   // Reset / intro behavior around drive mode.
@@ -689,7 +759,7 @@
       demoMode
         ? 'RoadCast simulation started.'
         : `RoadCast started. Navigating to ${state.destination?.name || 'your destination'}.`,
-      { dedupeMs: 5000 }
+      { category: 'info', dedupeMs: 5000 }
     );
   };
 
@@ -707,7 +777,7 @@
     if (mode === 'silent') {
       const cfg = getVoiceConfig();
       setVoiceMode(cfg.projectUrl && cfg.token ? 'myvoice' : 'standard');
-      queueSpeech('Voice guidance on.', { priority: true, dedupeMs: 1000 });
+      queueSpeech('Voice guidance on.', { category: 'info', dedupeMs: 1000 });
     } else {
       stopSpeech(true);
       setVoiceMode('silent');
@@ -724,7 +794,7 @@
       ui.voiceSetupStatus.textContent = 'Enter both fields before saving.';
       return;
     }
-    saveVoiceConfig({ projectUrl, token, voiceId: ROADCAST_VOICE_ID });
+    saveVoiceConfig({ projectUrl, token, voiceId: activeVoiceId() });
     setVoiceMode('myvoice');
     ui.voiceSetupStatus.textContent = '✅ Saved on this device. Tap Test My Voice.';
   });
@@ -735,7 +805,7 @@
     stopSpeech(true);
     setVoiceMode('standard');
     ui.voiceSetupStatus.textContent = 'Standard phone voice selected.';
-    queueSpeech('Standard RoadCast voice selected.', { priority: true, dedupeMs: 1000 });
+    queueSpeech('Standard RoadCast voice selected.', { category: 'info', dedupeMs: 1000 });
   });
 
   // Fill saved config and initial UI.
@@ -750,12 +820,16 @@
     stop(clearPending = true) { stopSpeech(clearPending); },
     mode() { return getVoiceMode(); },
     busy() { return nav.speechRunning || !!nav.activeAudio || nav.speechItems.length > 0; },
-    voiceId: ROADCAST_VOICE_ID,
+    get voiceId() { return activeVoiceId(); },
+    get profile() { return activeVoiceProfile(); },
+    refreshUi() { updateVoiceUi(); },
     gain: 1.32,
   };
 
-  const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.6.2';
+  document.addEventListener('roadcast:voiceprofilechanged', () => updateVoiceUi());
 
-  console.info(`RoadCast navigation + voice patch ${VERSION} loaded with voice ${ROADCAST_VOICE_ID}`);
+  const badge = document.querySelector('.badge');
+  if (badge) badge.textContent = 'MVP 0.7';
+
+  console.info(`RoadCast navigation + voice patch ${VERSION} loaded with active family voice profile`);
 })();

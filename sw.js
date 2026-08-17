@@ -1,4 +1,4 @@
-const CACHE = 'roadcast-shell-v13';
+const CACHE = 'roadcast-shell-v14';
 const SHELL = [
   './',
   './index.html',
@@ -8,15 +8,16 @@ const SHELL = [
   './traffic-routing.css?v=0.6.0',
   './app.js?v=0.2.1',
   './places-reroute-patch.js?v=0.3.0',
-  './voice-runtime-patch.js?v=0.6.2',
-  './nav-voice-patch.js?v=0.6.2',
+  './voice-runtime-patch.js?v=0.7.0',
+  './nav-voice-patch.js?v=0.7.0',
   './drive-experience-patch.js?v=0.4.2',
   './map-interaction-patch.js?v=0.4.3',
   './rotation-fix-patch.js?v=0.4.4',
-  './reroute-choice-patch.js?v=0.6.2',
-  './weather-intelligence-patch.js?v=0.6.2',
-  './traffic-routing-patch.js?v=0.6.2',
-  './handsfree-assistant-patch.js?v=0.6.2',
+  './reroute-choice-patch.js?v=0.7.0',
+  './weather-intelligence-patch.js?v=0.7.0',
+  './traffic-routing-patch.js?v=0.7.0',
+  './handsfree-assistant-patch.js?v=0.7.0',
+  './family-drive-patch.js?v=0.7.0',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'

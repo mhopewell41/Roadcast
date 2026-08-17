@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.2';
+  const VERSION = '0.7.0';
   const REFRESH_MS = 2 * 60 * 1000;
   const MIN_POINTS = 7;
   const MAX_POINTS = 18;
@@ -176,13 +176,13 @@
     if (!route || !checkpoints?.length) {
       const fallback = 'RoadCast weather monitoring is on. I will keep checking the route every two minutes.';
       wx.lastSummaryText = fallback;
-      window.RoadCastVoice?.speak(fallback, { dedupeMs: 5000, force: !!options.force });
+      window.RoadCastVoice?.speak(fallback, { category: 'weather', dedupeMs: 5000, force: !!options.force });
       return fallback;
     }
 
     const text = buildWeatherSummary(checkpoints, currentProgress, route);
     wx.lastSummaryText = text;
-    window.RoadCastVoice?.speak(text, { priority: false, dedupeMs: 5000, force: !!options.force });
+    window.RoadCastVoice?.speak(text, { category: 'weather', dedupeMs: 5000, force: !!options.force });
     return text;
   }
 
@@ -197,7 +197,7 @@
       wx.lastWetNow = true;
       window.RoadCastVoice?.speak(
         'Rain has reached your current part of the route. Roads may be slick, so give yourself a little extra space.',
-        { priority: true, dedupeMs: 180000 }
+        { category: 'safety', dedupeMs: 180000 }
       );
     } else if (!wetNow) {
       wx.lastWetNow = false;
@@ -238,7 +238,7 @@
 
     window.RoadCastVoice?.speak(
       phrase,
-      { priority: severity(firstWet.weather) >= 65, dedupeMs: 300000 }
+      { category: severity(firstWet.weather) >= 65 ? 'safety' : 'weather', dedupeMs: 300000 }
     );
   }
 
@@ -294,7 +294,7 @@
       if (reason === 'start' && !window.__roadcastRerouting) {
         const message = 'RoadCast weather monitoring is on, but the first live weather refresh was delayed. I will try again in two minutes.';
         wx.lastSummaryText = message;
-        window.RoadCastVoice?.speak(message, { dedupeMs: 5000 });
+        window.RoadCastVoice?.speak(message, { category: 'weather', dedupeMs: 5000 });
       }
     } finally {
       wx.refreshing = false;
@@ -344,6 +344,6 @@
   };
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.6.2';
+  if (badge) badge.textContent = 'MVP 0.7';
   console.info(`RoadCast 15-minute weather intelligence ${VERSION} loaded.`);
 })();

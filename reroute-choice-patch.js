@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.2';
+  const VERSION = '0.7.0';
   const SOFT_OFF_ROUTE_METERS = 45;
   const NORMAL_OFF_ROUTE_METERS = 75;
   const HARD_OFF_ROUTE_METERS = 150;
@@ -15,25 +15,51 @@
   let noticeShown = false;
   let lastJokeIndex = -1;
 
-  const rerouteLines = [
-    'I see we are freelancing the route today. No problem. Recalculating.',
-    'Bold choice. You have selected the scenic option. Rerouting.',
-    'That was not the road I picked, but I admire the confidence. Recalculating.',
-    'Plot twist. We are going this way now. Rerouting.',
-    'You clearly had your own plan. Respect. Finding another route.',
-    'RoadCast has noted your creative interpretation of directions. Recalculating.',
-    'Well, that turn was optional apparently. Let me find us another way.',
-    'I had a route. You had a vision. Rerouting.',
-    'Unexpected road choice detected. I will pretend we planned that. Recalculating.',
-    'All right, captain. Your road it is. Finding a new route.',
-  ];
+  const ATTITUDE_KEY = 'roadcast_attitude_level_v1';
+
+  const rerouteLines = {
+    chill: [
+      'No problem. I am finding another route.',
+      'Route changed. Recalculating from here.',
+    ],
+    playful: [
+      'Plot twist. We are going this way now.',
+      'You found the scenic option. I am adjusting the route.',
+      'That was not the road I picked, but we can work with it.',
+      'RoadCast has accepted your creative interpretation of the route.',
+    ],
+    spicy: [
+      'I said turn. You heard adventure. Fine. We are recalculating.',
+      'Interesting. The route and you appear to be seeing other roads.',
+      'That was a bold interpretation of stay on this road.',
+      'Fine. We will do it your way. Again.',
+      'The highlighted line was apparently more of a suggestion.',
+      'You missed it with confidence. I respect the commitment.',
+    ],
+    maximum: [
+      'You ignored the turn with remarkable confidence. I am almost impressed.',
+      'I can calculate routes. I cannot calculate why you ignored that turn.',
+      'At this point I am less navigation and more crisis management.',
+      'Another route change. My imaginary blood pressure is excellent, thanks for asking.',
+      'Wonderful. The highlighted line was apparently decorative.',
+      'You and the route are currently in a long-distance relationship. Recalculating.',
+      'I had directions. You had a vision. Apparently the vision won.',
+      'That turn had one job. So did you. We are moving on.',
+    ],
+  };
+
+  function attitudeLevel() {
+    const level = localStorage.getItem(ATTITUDE_KEY) || 'spicy';
+    return rerouteLines[level] ? level : 'spicy';
+  }
 
   function nextRerouteLine() {
-    if (rerouteLines.length === 1) return rerouteLines[0];
-    let index = Math.floor(Math.random() * rerouteLines.length);
-    if (index === lastJokeIndex) index = (index + 1) % rerouteLines.length;
+    const lines = rerouteLines[attitudeLevel()] || rerouteLines.spicy;
+    if (!lines.length) return '';
+    let index = Math.floor(Math.random() * lines.length);
+    if (index === lastJokeIndex && lines.length > 1) index = (index + 1) % lines.length;
     lastJokeIndex = index;
-    return rerouteLines[index];
+    return lines[index];
   }
 
   async function rebuildFromCurrentGps(raw) {
@@ -56,7 +82,7 @@
       }
       if (els.driveStatus) els.driveStatus.textContent = 'LIVE GPS • rerouting';
 
-      window.RoadCastVoice?.speak(nextRerouteLine(), { priority: true, dedupeMs: 1000 });
+      window.RoadCastVoice?.speak('Rerouting.', { category: 'reroute', dedupeMs: 1000 });
 
       const route = await getRoute(raw, state.destination);
       buildRouteMetrics(route);
@@ -108,8 +134,18 @@
 
       window.RoadCastVoice?.speak(
         'New route is ready. Continue on the highlighted road.',
-        { dedupeMs: 3000 }
+        { category: 'reroute', dedupeMs: 3000 }
       );
+
+      const personalityLine = nextRerouteLine();
+      if (personalityLine) {
+        setTimeout(() => {
+          window.RoadCastVoice?.speak(
+            personalityLine,
+            { category: 'personality', dedupeMs: 1000 }
+          );
+        }, 1800);
+      }
     } catch (err) {
       console.error('RoadCast fast reroute error', err);
       if (els.driveOverlay) els.driveOverlay.classList.remove('hidden');
@@ -200,6 +236,6 @@
   };
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.6.2';
+  if (badge) badge.textContent = 'MVP 0.7';
   console.info(`RoadCast personality reroute ${VERSION} loaded.`);
 })();
