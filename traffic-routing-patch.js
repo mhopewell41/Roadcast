@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.0';
+  const VERSION = '0.6.2';
   const CONFIG_KEY = 'roadcast_voice_config_v1';
   const OPTIONS_KEY = 'roadcast_route_options_v1';
 
@@ -61,16 +61,29 @@
   }
 
   function instructionRoadName(instruction) {
-    const text = String(instruction || '').replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+    const text = String(instruction || '')
+      .replace(/\n+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Only accept a road name when the instruction explicitly introduces one.
+    // Landmarks and POIs such as "turn at Pizza Inn" are intentionally ignored.
     const patterns = [
-      /\bonto\s+(.+?)(?:\s+\(|$)/i,
-      /\btoward\s+(.+?)(?:\s+\(|$)/i,
-      /\bon\s+(.+?)(?:\s+\(|$)/i,
-      /\bto\s+(.+?)(?:\s+\(|$)/i,
+      /\bonto\s+(.+?)(?:\s+\(|,|;|$)/i,
+      /\btoward\s+(.+?)(?:\s+\(|,|;|$)/i,
+      /\bon\s+(.+?)(?:\s+\(|,|;|$)/i,
     ];
+
     for (const pattern of patterns) {
       const m = text.match(pattern);
-      if (m?.[1]) return m[1].replace(/\bthen\b.*$/i, '').replace(/[.,;]+$/, '').trim();
+      if (!m?.[1]) continue;
+      const road = m[1]
+        .replace(/\([^)]*\)/g, '')
+        .replace(/\bthen\b.*$/i, '')
+        .replace(/[.,;]+$/, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (road && road.length <= 80) return road;
     }
     return '';
   }
@@ -423,6 +436,6 @@
 
   ensureTrafficUi();
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.6';
+  if (badge) badge.textContent = 'MVP 0.6.2';
   console.info(`RoadCast traffic-aware routing ${VERSION} loaded.`);
 })();

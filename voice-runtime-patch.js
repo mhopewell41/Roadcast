@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.1';
+  const VERSION = '0.6.2';
   const nativeFetch = window.fetch.bind(window);
   const NativeAudio = window.Audio;
   let pendingVoiceText = '';
@@ -18,7 +18,7 @@
       const url = typeof input === 'string' ? input : String(input?.url || '');
       if (url.includes('/functions/v1/roadcast-voice')) {
         const body = typeof init?.body === 'string' ? JSON.parse(init.body) : null;
-        pendingVoiceText = String(body?.text || '').trim();
+        pendingVoiceText = String(body?.text || '').replace(/<break\s+time=\"[^\"]+\"\s*\/>/gi, '').trim();
       }
     } catch {}
     return nativeFetch(input, init);
@@ -45,7 +45,7 @@
         primed = true;
         const originalVolume = Number.isFinite(el.volume) ? el.volume : 1;
         const quietGap = Date.now() - lastVoiceEndedAt;
-        const warmMs = quietGap > 4500 ? 520 : 160;
+        const warmMs = quietGap > 4500 ? 180 : 90;
 
         try {
           el.volume = Math.min(originalVolume, 0.002);
@@ -108,5 +108,5 @@
     };
   }
 
-  console.info(`RoadCast audio wake-up protection ${VERSION} loaded.`);
+  console.info(`RoadCast SSML audio wake-up protection ${VERSION} loaded.`);
 })();

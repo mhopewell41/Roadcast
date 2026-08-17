@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.1';
+  const VERSION = '0.6.2';
   const SOFT_OFF_ROUTE_METERS = 45;
   const NORMAL_OFF_ROUTE_METERS = 75;
   const HARD_OFF_ROUTE_METERS = 150;
@@ -200,6 +200,6 @@
   };
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.6.1';
+  if (badge) badge.textContent = 'MVP 0.6.2';
   console.info(`RoadCast personality reroute ${VERSION} loaded.`);
 })();

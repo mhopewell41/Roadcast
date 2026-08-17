@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.0';
+  const VERSION = '0.6.2';
   const ROADCAST_VOICE_ID = '4hgEYmHo3owVoJYwXakA';
   const CONFIG_KEY = 'roadcast_voice_config_v1';
   const MODE_KEY = 'roadcast_voice_mode_v1';
@@ -127,7 +127,9 @@
         'x-roadcast-token': cfg.token,
       },
       body: JSON.stringify({
-        text,
+        // A short leading break gives Bluetooth/car audio time to wake before
+        // the first spoken word. The RoadCast UI still keeps the clean text.
+        text: `<break time="0.40s" />${text}`,
         voice_id: ROADCAST_VOICE_ID,
       }),
     });
@@ -236,24 +238,73 @@
     }
   }
 
-  function queueSpeech(text, opts = {}) {
+  function splitSpeechText(text, maxChars = 175) {
     const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
-    if (!cleaned) return;
+    if (!cleaned || cleaned.length <= maxChars) return cleaned ? [cleaned] : [];
 
+    const sentences = cleaned.match(/[^.!?]+[.!?]?/g) || [cleaned];
+    const parts = [];
+    let current = '';
+
+    for (const sentenceRaw of sentences) {
+      const sentence = sentenceRaw.trim();
+      if (!sentence) continue;
+
+      if ((current + ' ' + sentence).trim().length <= maxChars) {
+        current = (current + ' ' + sentence).trim();
+        continue;
+      }
+
+      if (current) parts.push(current);
+      current = '';
+
+      if (sentence.length <= maxChars) {
+        current = sentence;
+        continue;
+      }
+
+      const words = sentence.split(/\s+/);
+      let chunk = '';
+      for (const word of words) {
+        if ((chunk + ' ' + word).trim().length > maxChars && chunk) {
+          parts.push(chunk);
+          chunk = word;
+        } else {
+          chunk = (chunk + ' ' + word).trim();
+        }
+      }
+      if (chunk) current = chunk;
+    }
+
+    if (current) parts.push(current);
+    return parts;
+  }
+
+  function enqueueSpeechItem(cleaned, opts = {}) {
     const now = Date.now();
     const dedupeKey = cleaned.toLowerCase();
     const previous = nav.lastSpeech.get(dedupeKey) || 0;
     const dedupeMs = opts.dedupeMs ?? 15000;
-    if (now - previous < dedupeMs) return;
+    if (!opts.force && now - previous < dedupeMs) return;
     nav.lastSpeech.set(dedupeKey, now);
 
-    if (opts.interrupt === true) {
-      stopSpeech(false);
-      nav.speechItems.unshift({ text: cleaned, opts });
-    } else if (opts.priority) {
-      nav.speechItems.unshift({ text: cleaned, opts });
+    // Priority changes queue order only. It never cuts off speech already
+    // playing. This prevents weather, navigation and reroute personality from
+    // talking over one another.
+    if (opts.priority) nav.speechItems.unshift({ text: cleaned, opts });
+    else nav.speechItems.push({ text: cleaned, opts });
+  }
+
+  function queueSpeech(text, opts = {}) {
+    const parts = splitSpeechText(text);
+    if (!parts.length) return;
+
+    // Preserve sentence order for priority speech while still placing the
+    // whole group ahead of normal chatter.
+    if (opts.priority && parts.length > 1) {
+      for (let i = parts.length - 1; i >= 0; i--) enqueueSpeechItem(parts[i], opts);
     } else {
-      nav.speechItems.push({ text: cleaned, opts });
+      parts.forEach(part => enqueueSpeechItem(part, opts));
     }
 
     runSpeechQueue();
@@ -311,15 +362,79 @@
     return `${Math.round(mi)} mi`;
   }
 
+  function numberToWords(value) {
+    const n = Math.max(0, Math.round(Number(value || 0)));
+    if (n === 0) return 'zero';
+
+    const ones = ['','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+    const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+
+    function underThousand(x) {
+      const words = [];
+      if (x >= 100) {
+        words.push(`${ones[Math.floor(x / 100)]} hundred`);
+        x %= 100;
+      }
+      if (x >= 20) {
+        words.push(tens[Math.floor(x / 10)]);
+        if (x % 10) words.push(ones[x % 10]);
+      } else if (x > 0) {
+        words.push(ones[x]);
+      }
+      return words.join(' ');
+    }
+
+    if (n < 1000) return underThousand(n);
+    if (n < 10000) {
+      const thousands = Math.floor(n / 1000);
+      const rest = n % 1000;
+      return `${underThousand(thousands)} thousand${rest ? ` ${underThousand(rest)}` : ''}`;
+    }
+    return String(n);
+  }
+
   function spokenDistance(meters) {
     if (meters < 305) {
       const feet = Math.max(50, Math.round((meters * 3.28084) / 50) * 50);
-      return `${feet} feet`;
+      return `${numberToWords(feet)} feet`;
     }
+
     const mi = meters / 1609.344;
-    if (mi < 0.85) return 'half a mile';
-    if (mi < 1.25) return 'one mile';
-    return `${Math.max(1, Math.round(mi))} miles`;
+    if (mi < 0.35) return 'about three tenths of a mile';
+    if (mi < 0.45) return 'about four tenths of a mile';
+    if (mi < 0.70) return 'about half a mile';
+    if (mi < 1.25) return 'about one mile';
+    return `about ${numberToWords(Math.max(1, Math.round(mi)))} miles`;
+  }
+
+  function expandRoadName(value) {
+    let road = String(value || '').trim();
+    if (!road) return '';
+
+    // Expand road suffixes only near the end of a road name so a name such as
+    // "Dr Martin Luther King" is not mistakenly changed to "Drive Martin...".
+    const suffixes = [
+      ['Dr', 'Drive'], ['Rd', 'Road'], ['St', 'Street'], ['Ave', 'Avenue'],
+      ['Blvd', 'Boulevard'], ['Ln', 'Lane'], ['Ct', 'Court'], ['Cir', 'Circle'],
+      ['Pkwy', 'Parkway'], ['Hwy', 'Highway'], ['Ter', 'Terrace'], ['Pl', 'Place']
+    ];
+
+    for (const [abbr, full] of suffixes) {
+      const re = new RegExp(`\\b${abbr}\\.?\\s*(N|S|E|W|NE|NW|SE|SW)?$`, 'i');
+      road = road.replace(re, (_, dir = '') => `${full}${dir ? ` ${dir}` : ''}`);
+    }
+
+    road = road
+      .replace(/\bNW\b/g, 'Northwest')
+      .replace(/\bNE\b/g, 'Northeast')
+      .replace(/\bSW\b/g, 'Southwest')
+      .replace(/\bSE\b/g, 'Southeast')
+      .replace(/\bN\b$/g, 'North')
+      .replace(/\bS\b$/g, 'South')
+      .replace(/\bE\b$/g, 'East')
+      .replace(/\bW\b$/g, 'West');
+
+    return road.replace(/\s+/g, ' ').trim();
   }
 
   function turnIcon(type, modifier) {
@@ -338,34 +453,31 @@
     return '⬆️';
   }
 
-  function humanInstruction(step, includeDistance = false, meters = 0) {
-    if (step?._googleInstruction) {
-      const clean = String(step._googleInstruction).replace(/\n+/g, '. ').replace(/\s+/g, ' ').trim().replace(/[.]+$/, '');
-      const spoken = clean ? clean.charAt(0).toLowerCase() + clean.slice(1) : '';
-      if (includeDistance && String(step?.maneuver?.type || '').toLowerCase() !== 'arrive') {
-        return `In ${spokenDistance(meters)}, ${spoken}.`;
-      }
-      return clean ? `${clean}.` : 'Continue.';
-    }
-
+  function baseInstruction(step) {
     const man = step?.maneuver || {};
     const type = String(man.type || '').toLowerCase();
     const mod = String(man.modifier || '').toLowerCase();
-    const road = String(step?.name || step?.ref || '').trim();
+    const road = expandRoadName(step?.name || step?.ref || '');
     let action = '';
 
     if (type === 'arrive') action = 'Arrive at your destination';
-    else if (type === 'merge') action = `Merge ${mod || 'ahead'}`;
-    else if (type === 'on ramp') action = `Take the ${mod || ''} ramp`.replace(/\s+/g, ' ').trim();
-    else if (type === 'off ramp') action = `Take the ${mod || ''} exit`.replace(/\s+/g, ' ').trim();
-    else if (type === 'fork') action = `Keep ${mod || 'ahead'} at the fork`;
-    else if (type === 'end of road') action = `At the end of the road, turn ${mod || ''}`.trim();
+    else if (type === 'merge') action = `Merge ${mod.includes('left') ? 'left' : mod.includes('right') ? 'right' : 'ahead'}`;
+    else if (type === 'on ramp') action = `Take the ${mod.includes('left') ? 'left' : mod.includes('right') ? 'right' : ''} ramp`.replace(/\s+/g, ' ').trim();
+    else if (type === 'off ramp') action = `Take the ${mod.includes('left') ? 'left' : mod.includes('right') ? 'right' : ''} exit`.replace(/\s+/g, ' ').trim();
+    else if (type === 'fork') action = `Keep ${mod.includes('left') ? 'left' : mod.includes('right') ? 'right' : 'ahead'} at the fork`;
+    else if (type === 'new name') action = road ? `Continue onto ${road}` : 'Continue straight';
     else if (mod.includes('uturn')) action = 'Make a U-turn';
     else if (mod.includes('left')) action = mod.includes('slight') ? 'Bear left' : mod.includes('sharp') ? 'Make a sharp left' : 'Turn left';
     else if (mod.includes('right')) action = mod.includes('slight') ? 'Bear right' : mod.includes('sharp') ? 'Make a sharp right' : 'Turn right';
     else action = 'Continue straight';
 
-    if (road && type !== 'arrive') action += ` onto ${road}`;
+    if (road && type !== 'arrive' && type !== 'new name') action += ` onto ${road}`;
+    return action.replace(/\s+/g, ' ').trim();
+  }
+
+  function humanInstruction(step, includeDistance = false, meters = 0) {
+    const action = baseInstruction(step);
+    const type = String(step?.maneuver?.type || '').toLowerCase();
     if (includeDistance && type !== 'arrive') return `In ${spokenDistance(meters)}, ${action.toLowerCase()}.`;
     return `${action}.`;
   }
@@ -403,6 +515,29 @@
     );
     candidates.sort((a, b) => a._progress - b._progress);
     return candidates[0] || null;
+  }
+
+  function followingStep(route, step) {
+    if (!route?.steps?.length || !Number.isFinite(step?._progress)) return null;
+    ensureStepProgress(route);
+    const candidates = route.steps.filter(candidate =>
+      candidate !== step &&
+      Number.isFinite(candidate._progress) &&
+      String(candidate?.maneuver?.type || '').toLowerCase() !== 'depart' &&
+      candidate._progress > step._progress + 0.00005
+    );
+    candidates.sort((a, b) => a._progress - b._progress);
+    return candidates[0] || null;
+  }
+
+  function quickTurnFollowUp(route, step) {
+    const next = followingStep(route, step);
+    if (!next) return '';
+    const routeMeters = route.polylineDistance || route.distance || 0;
+    const gapMeters = Math.max(0, (next._progress - step._progress) * routeMeters);
+    if (!routeMeters || gapMeters > 260 || gapMeters < 8) return '';
+    const nextAction = baseInstruction(next).replace(/[.]+$/, '').toLowerCase();
+    return ` Then, in ${spokenDistance(gapMeters)}, ${nextAction}.`;
   }
 
   function updateTurnUi(located) {
@@ -446,16 +581,25 @@
         stages.add('arrive');
       }
     } else {
-      if (meters <= 1200 && meters > 320 && !stages.has('far')) {
+      // First guidance lands in the requested 0.3 to 0.5 mile window. If a
+      // route starts closer than that, say it as soon as we safely can.
+      if (meters <= 805 && meters > 55 && !stages.has('far')) {
         queueSpeech(humanInstruction(step, true, meters), { dedupeMs: 45000 });
         stages.add('far');
       }
-      if (meters <= 300 && meters > 75 && !stages.has('near')) {
-        queueSpeech(humanInstruction(step, true, meters), { priority: true, dedupeMs: 45000 });
+
+      // Final preparation is around 100 feet. If another maneuver follows very
+      // quickly, include it in the same sentence so the driver is not surprised.
+      if (meters <= 38 && meters > 12 && !stages.has('near')) {
+        const phrase = humanInstruction(step, true, meters).replace(/[.]+$/, '') + quickTurnFollowUp(route, step);
+        queueSpeech(phrase, { priority: true, dedupeMs: 45000 });
         stages.add('near');
       }
-      if (meters <= 70 && !stages.has('now')) {
-        queueSpeech(humanInstruction(step, false, meters), { priority: true, interrupt: true, dedupeMs: 45000 });
+
+      // GPS can jump past the 100-foot window. In that case, give one concise
+      // maneuver call, but never interrupt audio already playing.
+      if (meters <= 12 && !stages.has('now')) {
+        queueSpeech(humanInstruction(step, false, meters), { priority: true, dedupeMs: 45000 });
         stages.add('now');
       }
     }
@@ -611,7 +755,7 @@
   };
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.6';
+  if (badge) badge.textContent = 'MVP 0.6.2';
 
   console.info(`RoadCast navigation + voice patch ${VERSION} loaded with voice ${ROADCAST_VOICE_ID}`);
 })();

@@ -1,7 +1,7 @@
 'use strict';
 
 (() => {
-  const VERSION = '0.6.1';
+  const VERSION = '0.6.2';
   const ENABLED_KEY = 'roadcast_handsfree_enabled_v1';
   const LISTEN_MS = 7000;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -235,8 +235,13 @@
       return;
     }
 
-    if (/\b(weather|rain|storm|temperature|forecast)\b/.test(text)) {
-      speak(weatherReply());
+    if (/\b(weather|rain|storm|temperature|forecast|conditions|outside)\b/.test(text)) {
+      setStatus('Weather requested...', 'heard');
+      if (window.RoadCastWeather?.speakSummary) {
+        window.RoadCastWeather.speakSummary({ force: true });
+      } else {
+        speak(weatherReply(), { force: true });
+      }
       return;
     }
 
@@ -356,7 +361,7 @@
   ensureUi();
 
   const badge = document.querySelector('.badge');
-  if (badge) badge.textContent = 'MVP 0.6.1';
+  if (badge) badge.textContent = 'MVP 0.6.2';
 
   console.info(`RoadCast hands-free reply window ${VERSION} loaded.`);
 })();
