@@ -1,4 +1,4 @@
-const CACHE = 'roadcast-shell-v14';
+const CACHE = 'roadcast-shell-v16';
 const SHELL = [
   './',
   './index.html',
@@ -17,7 +17,8 @@ const SHELL = [
   './weather-intelligence-patch.js?v=0.7.0',
   './traffic-routing-patch.js?v=0.7.0',
   './handsfree-assistant-patch.js?v=0.7.0',
-  './family-drive-patch.js?v=0.7.0',
+  './family-drive-patch.js?v=0.7.1',
+  './quick-places-patch.js?v=0.7.2',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png'

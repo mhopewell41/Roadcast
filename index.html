@@ -23,7 +23,7 @@
         <h1>ROADCAST</h1>
         <p>Know the weather you are driving into.</p>
       </div>
-      <span class="badge">MVP 0.7</span>
+      <span class="badge">MVP 0.7.2</span>
     </header>
 
     <section>
@@ -43,6 +43,26 @@
       </div>
       <div id="searchResults" class="results"></div>
       <div id="selectedDestination" class="selected hidden"></div>
+      <div id="savePlaceActions072" class="save-place-actions-072 hidden">
+        <button id="saveHome072" type="button">🏠 Save as Home</button>
+        <button id="saveWork072" type="button">💼 Save as Work</button>
+      </div>
+
+
+
+      <div id="quickPlaces072" class="quick-places-072">
+        <div class="quick-places-title-072">
+          <strong>⚡ Quick Places</strong>
+          <span id="quickPlacesStatus072">Home, Work & recent trips</span>
+        </div>
+
+        <div class="quick-place-main-072">
+          <button id="homePlaceBtn072" type="button">🏠 Home</button>
+          <button id="workPlaceBtn072" type="button">💼 Work</button>
+        </div>
+
+        <div id="recentPlaces072" class="recent-places-072"></div>
+      </div>
 
       <div class="departure card">
         <div>
@@ -57,6 +77,82 @@
 
       <button id="tripBtn" class="trip-btn primary">🚗 CHECK MY TRIP</button>
       <div id="status" class="status"></div>
+    </section>
+
+
+    <section id="roadcastSettingsSection071">
+      <div class="section-title-row">
+        <h2>⚙️ RoadCast Settings</h2>
+        <span class="badge">Family Drive</span>
+      </div>
+
+      <div class="card roadcast-settings-card-071">
+        <div class="roadcast-settings-grid-071">
+          <label>
+            <span>🎙️ Active voice</span>
+            <select id="settingsActiveVoice071"></select>
+          </label>
+
+          <label>
+            <span>😏 Attitude</span>
+            <select id="settingsAttitude071">
+              <option value="chill">Chill</option>
+              <option value="playful">Playful</option>
+              <option value="spicy">Spicy 🌶️</option>
+              <option value="maximum">Maximum attitude 🔥</option>
+            </select>
+          </label>
+
+          <label>
+            <span>🗺️ Map view</span>
+            <select id="settingsMapView071">
+              <option value="street">Street</option>
+              <option value="satellite">Satellite 🛰️</option>
+            </select>
+          </label>
+
+          <label class="roadcast-check-row-071">
+            <input id="settingsKeepAwake071" type="checkbox">
+            <span>☀️ Keep screen awake while navigating</span>
+          </label>
+        </div>
+
+        <div class="roadcast-settings-status-071">
+          <span id="settingsWakeStatus071">☀️ Keep-awake ready</span>
+          <span id="settingsMapStatus071">🗺️ Street map</span>
+        </div>
+
+        <details id="familyVoiceDetails071" class="family-voice-details-071">
+          <summary>👨‍👩‍👦 Family Voice Profiles</summary>
+
+          <div class="family-profile-copy-071">
+            Add an approved ElevenLabs voice ID for each family member.
+          </div>
+
+          <div class="roadcast-settings-grid-071">
+            <label>
+              <span>Profile name</span>
+              <input id="settingsProfileName071" placeholder="Example: Mom" autocomplete="off">
+            </label>
+
+            <label>
+              <span>ElevenLabs voice ID</span>
+              <input id="settingsVoiceId071" placeholder="Paste approved voice ID" autocomplete="off">
+            </label>
+          </div>
+
+          <div class="roadcast-settings-actions-071">
+            <button id="settingsSaveVoice071" class="primary" type="button">Save voice</button>
+            <button id="settingsTestVoice071" type="button">▶ Test selected voice</button>
+            <button id="settingsRemoveVoice071" type="button">Remove selected</button>
+            <button id="settingsVoiceConnection071" type="button">🔐 Voice connection</button>
+          </div>
+
+          <div id="settingsFamilyStatus071" class="check-sub">
+            Only add a cloned voice that the speaker has agreed to use.
+          </div>
+        </details>
+      </div>
     </section>
 
     <section id="tripSection" class="hidden">
@@ -197,6 +293,7 @@
   <script src="weather-intelligence-patch.js?v=0.7.0"></script>
   <script src="traffic-routing-patch.js?v=0.7.0"></script>
   <script src="handsfree-assistant-patch.js?v=0.7.0"></script>
-  <script src="family-drive-patch.js?v=0.7.0"></script>
+  <script src="family-drive-patch.js?v=0.7.1"></script>
+  <script src="quick-places-patch.js?v=0.7.2"></script>
 </body>
 </html>
